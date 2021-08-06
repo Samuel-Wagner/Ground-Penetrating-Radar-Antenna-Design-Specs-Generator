@@ -270,7 +270,7 @@ fprintf("\t Minimum: %8.2f dB     | Calculated: %8.3f dB    | Passed? %s\n", k_r
 
 fprintf("\n__________________________ Pre-Design Specifications _________________________\n");
 fprintf("Beamwidth: See Figure 2. Rec. Range: [%8.2f, %8.2f] deg.\n",min_hpbw*180/pi,max_hpbw*180/pi);
-fprintf("RCS:       %8.2f dBsm\n", oant_max);
+fprintf("RCS (check if problematic):       %8.2f dBsm\n", oant_max);
 fprintf("Size:      %8.2f cm\n", maximum_width*1e2);
 fprintf("Weight:    %8.2f g\n\n", maximum_weight.*1e3);
 
