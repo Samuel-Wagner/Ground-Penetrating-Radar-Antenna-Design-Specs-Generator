@@ -1,7 +1,7 @@
 # gpr-antenna-specifications-code
 Companion code to run along with paper. Written in MATLAB R2020a.
 
-To run, simply run main.m. There is a list of environmental parameters to change that can change the specification output.
+To run, download the entire .zip file, extract, and run main.m. MATLAB's working directory must be in the downloaded folder with main.m. There is a list of environmental parameters to change that can change the specification output.
 
 Several images output:
 
