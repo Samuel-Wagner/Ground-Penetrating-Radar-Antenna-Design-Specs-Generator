@@ -331,7 +331,7 @@ function plot_fig_3(t,t_0,R,y_t,k)
     t_max       = t(max_ind);
     fwtm_2      = t_0 - t_max;
     
-    figure(); 
+    figure();  set(gcf,'position'[596   291   644   687]);
     subplot(2,1,2);
     hold on; grid on;
     plot((t-t_0).*1e9,R,'k');
