@@ -7,7 +7,7 @@ Several images output:
 
 Specification table:
 
-![spec-table](https://github.com/Samuel-Wagner/Ground-Penetrating-Radar-Antenna-Design-Specs-Generator/blob/main/imgs/console_out.PNG)
+![spec-table](https://github.com/Samuel-Wagner/Ground-Penetrating-Radar-Antenna-Design-Specs-Generator/blob/main/imgs/console_output.PNG)
 
 Coupling specification plots:
 
