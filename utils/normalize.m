@@ -1,4 +1,9 @@
 function n = normalize(N)
-% Samuel Wagner, UC Davis ECE MML, 2021
-% divides a matrix by its maximum magnitude element
-n = N ./ max(abs(N(:)));
+	% normalize
+	% function to normalize an input N-D matrix N by its
+	% largest absolute value
+	%
+	% N - input (un-normalized) matrix
+	% n - output (normalized) matrix
+	n = N ./ max(abs(N(:)));
+end
