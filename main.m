@@ -1,5 +1,5 @@
 % Script written for use with paper
-% Written by Sam Wagner Aug 3, 2021
+% Written by Sam Wagner Feb 8, 2022
 % INPUTS: 
 %        - parameters in Table 1                         (Defaults given)
 %        - .s2p file with simulated antenna coupling     (Default provided)
@@ -10,7 +10,7 @@
 % - curve fitting toolbox
 % - RF toolbox
 %% housekeeping 
-addpath('.\utils\');
+addpath(genpath('.\utils\'));
 clear all; close all; clc;                      % reset script
 set(0,'defaultfigurecolor',      [1 1 1]);      % white figure backgrounds 
 set(0,'defaultAxesFontSize',     20);           % font size
@@ -22,18 +22,16 @@ set(0,'defaultTextInterpreter',  'latex');      % use latex
 % fundamental GPR system parameters
 V_pp_t  = 10;       % peak to peak voltage (Volts)
 f_low   = 0.3e9;    % minimum operating frequency (Hz)
-f_high  = 6e9;      % maximum operating frequency (Hz)
+f_high  = 4e9;      % maximum operating frequency (Hz)
 o_j     = 20e-12;   % system jitter or equivalent (s)
-h       = 25e-2;    % expected antenna operating height (m)
-d       = 20e-2;    % expected target depth (m)
-d_max   = 1;        % maximum target depth (m)
+d       = [25e-2; 10e-2; 25e-2];       % expected target depth (m)
+er      = [1; 6; 4];        % expected ground relative permittivity
+alpha   = [0; 3; 1];     % expected ground EM attenuation constant (Np/m)
 G       = 5;        % antenna gain at center frequency (dB)
 G_amp   = 14.5;     % receiver amplifier gain (dB)
 P_1dB   = 19;       % receiver amplifier output 1dB compression point (dBm)
 Z0      = 50;       % characteristic impedance
 o       = 0;        % expected target radar cross section (dBsm)
-er      = 5;        % expected ground relative permittivity
-alpha   = 0.01;     % expected ground EM attenuation constant (Np/m)
 V_noise_rms = 1e-3; % RMS noise of receiver 
 P_int   = 23;       % interferer power (dBm)
 Gamma_h = -0.9;     % enclosure reflectivity
@@ -43,7 +41,6 @@ k_coupling      = 1;        % coupling slope threshold
 coupling_Zscore = 1.96;     % coupling slope Z score (Z_1-alpha/2)
 k_distortion    = 0.9;      % pulse integrity threshold
 k_RCS           = 2;        % RCS threshold
-m_RCS           = 1;        % RCS bounce number 
 k_ringing       = -20;      % max ringing specification (in dB)
 k_FBR           = 0.1;      % front-to-back ratio threshold
 
@@ -55,6 +52,11 @@ transmit_s2p_filename    = ".\data\transmission_1m.s2p";    % file source for tr
 % physical parameters
 c = 3e8; % speed of light
 
+n_layers = numel(d);
+
+% any funny business?
+assert(numel(er)    == n_layers, '`d`,`er`, and `alpha` must have the same number of elements');
+assert(numel(alpha) == n_layers, '`d`,`er`, and `alpha` must have the same number of elements');
 %% Create simulation parameters & convert params to linear
 % Pulse I/O Simulation Parameters
 Fs  = (2*f_high)*10;            % sampling rate - 10x oversampling
@@ -74,7 +76,7 @@ X_f         = fftshift(fft(x_t));
 
 % derived parameters
 f_c     = (f_low + f_high)/2;   % center frequency
-l_c     = c/f_c;                % center wavelength
+l_c     = c/f_c/sqrt(er(1));    % center wavelength
 G       = 10^(G/10);            % convert to linear
 G_amp   = 10^(G_amp/10);        % convert to linear
 o       = 10^(o/10);            % convert to linear
@@ -89,10 +91,16 @@ P_int   = 10^((P_int-30)/10);   % convert to Watts
 max_coupling_Vpp = 2*sqrt(2)*sqrt(P_1dB*Z0/G_amp);
 
 % calculate slope specification
-max_coupling_slope = (k_coupling*V_pp_t/coupling_Zscore/o_j) * ...
-    (G*l_c*sqrt(er)*sqrt(o))/((sqrt(er)+1)^2*(4*pi)^(3/2)*(h+d)^2) * ...
-    exp(-alpha*d)*sqrt(2) ...
-    *1e3/1e9;
+
+% first, calculate T(0) and A(0)
+T_0 = find_T(zeros(n_layers,1),er);
+A_0 = find_A(zeros(n_layers,1),d,alpha);
+
+% now, calculate slope specification
+max_coupling_slope = (k_coupling*V_pp_t/coupling_Zscore/o_j/2/sqrt(2)) * ...
+    (G*l_c*sqrt(o))/((4*pi)^(3/2)*(sum(d))^2) * ...
+    T_0 * A_0 ...
+    *1e3/1e9; % convert to mV/ns
 
 if(perform_verification_spec)
     % get simulated coupling signal
@@ -100,7 +108,7 @@ if(perform_verification_spec)
     C_f         = Coupling_H.*X_f;                          % frequency-domain coupling signal
     c_t         = real(ifft(ifftshift(C_f)));               % time-domain coupling signal
     d_c_t       = gradient(c_t,Ts) .*1e3/1e9;               % coupling slope (mV/ns)
-    time_gate   = (t-extra_delay) > (2*h/c);
+    time_gate   = (t-extra_delay) > (2*sum(d(1:end-1).*sqrt(er(1:end-1)))/c);
 
     % find peaks to find vpp
     [peaks, locs] = findpeaks(abs(c_t),'MinPeakProminence',max(c_t)/10);
@@ -184,7 +192,7 @@ tol     = 0.03;         % tolerance to zeroing out all but main beam
 
 is_lt_noise_rms = zeros(Nm,1);          % logical vector used in finding theta_m
 theta_ms        = zeros(Nm,1);          % stores values of theta_m
-xa              = linspace(0,2+(2*h),512); % "search" vector to find theta_m 
+xa              = linspace(0,2+(2*d(1)),512); % "search" vector to find theta_m 
 
 % iterate over m to define the different gain patterns
 for ii = 1:Nm
@@ -210,38 +218,43 @@ G_p = F.*G_0; % un-normalize F to contain gain patterns
 % sweep through xa to find the last theta_m
 for ii = 1:numel(xa)
     % find theta_a and theta_g (angle in air, angle in ground) - ray based
-    [theta_a,theta_g,~] = find_GPR_transmission_angles(er,h,xa(ii),0, 0, 0, d);
-
-    % find the index which corresponds to theta_a (angle in air)
-    [~,theta_ind] = min(abs(theta-theta_a));
+%     [theta_a,theta_g,~] = find_GPR_transmission_angles(er,h,xa(ii),0, 0, 0, d);
+    [theta_guess ,~] = find_GPR_transmission_angles_multilayer(xa(ii), 0, 0, 0, d, er, 1);
+    if(theta_guess(1)<0)
+        theta_guess = -1.*theta_guess;
+    end
+    T = find_T(theta_guess,er);
+    A = find_A(theta_guess,alpha,d);
     
-    % find ground power reflectivity and transmissivity at angle theta (TE
-    % example)
-    R = ((cos(theta_a) - sqrt(er)*sqrt(1-(1/sqrt(er)*sin(theta_a) )))...
-        /(cos(theta_a) + sqrt(er)*sqrt(1-(1/sqrt(er)*sin(theta_a))^2 )))^2;
-    T = 1-R;
-
+    % find the index which corresponds to theta_a (angle in air)
+    [~,theta_ind] = min(abs(theta-theta_guess(1)));
+    
     % iterate over the possible patterns, finding the received voltage
     % using (6)
     V_rx_rms = zeros(Nm,1);
     for kk = 1:Nm
         Gi = G_p(theta_ind,kk);
 
-        V_rx_rms(kk) = V_pp_t/2/sqrt(2)*(Gi*T*l_c*sqrt(o))...
-            /((4*pi)^(3/2)*(h*sec(theta_a)+d*sec(theta_g))^2)...
-            *exp(-alpha*d*sec(theta_g));
+%         V_rx_rms(kk) = V_pp_t/2/sqrt(2)*(Gi*T*l_c*sqrt(o))...
+%             /((4*pi)^(3/2)*(h*sec(theta_a)+d*sec(theta_g))^2)...
+%             *exp(-alpha*d*sec(theta_g));
+        
+        V_rx_rms(kk) = V_pp_t/2/sqrt(2)*(Gi*l_c*sqrt(o))...
+            /((4*pi)^(3/2)*(sum(d.*sec(theta_guess)))^2)...
+            *T*A;
     end
     
     is_gt_noise_rms = V_rx_rms > V_noise_rms;               % logical vector-is V_rx_rms greater than noise?
     is_lt_noise_rms = is_lt_noise_rms | [~is_gt_noise_rms]; % has there been a less-than-noise value previously?
 
     % if greater than noise and have never experienced a less-than-noise event, save theta_g as theta_m.       
-    theta_ms(is_gt_noise_rms & [~is_lt_noise_rms]) = theta_g; 
+    theta_ms(is_gt_noise_rms & [~is_lt_noise_rms]) = theta_guess(end); 
 end
 
 % calculate horizontal resolution based on theta_m
-HRs = l_c./2./sqrt(er)./sin(theta_ms).*1e2;
+HRs = l_c./2./sqrt(er(end))./sin(theta_ms).*1e2;
 
+% calculate the beamwidths
 [min_hpbw, max_hpbw] = find_optimal_beamwidths(HPBWs, HRs);
 
 % plot the figure (in external function to save space)
@@ -249,11 +262,26 @@ plot_fig_4(HPBWs,HRs,max(G_p,[],1));
 
 %% Section 6: Antenna RCS Specification
 
-R = 1/(8*pi*h)*abs((1-sqrt(er))/(1+sqrt(er)));
-oant_max = -20*log10(R) ...
-         + 20/m_RCS*log10(k_RCS*(l_c*sqrt(er*o)*exp(-alpha*d))/((sqrt(er)+1)^2*(h+d)^2)) ...
-         - 20.94/m_RCS;
-     
+% find the m_RCS that is most valid
+m           = 1:5;                          % search from m = 1 to m = 5
+LHS_12      = d(1)*sqrt(er(1))*(1 + m);     % Left Hand Side of (12) - RCS validitiy
+RHS_12      = sum(d.*sqrt(er));             % Right Hand Side of (12) - RCS validity
+is_m_valid  = LHS_12 >= RHS_12;             % vec of bools - does RCS arrive in time?
+
+% find m_RCS, first m that arrives in target time
+first_m_ind = find(is_m_valid, 1, 'first');
+m_RCS       = m(first_m_ind);
+
+% R - reflectivity from first gnd layer
+R = 1/(8*pi*d(1))*abs((sqrt(er(1))-sqrt(er(2)))/(sqrt(er(1))+sqrt(er(2))));
+
+% re-calcualte T_0 and A_0, just in case.
+T_0 = find_T(zeros(n_layers,1), er);            % one-way power transmissivity
+A_0 = find_A(zeros(n_layers,1), d, alpha);      % one-way power attenuation
+
+% calculate maximum allowable antenna RCS
+oant_max = -20*(m_RCS+1)/m_RCS*log10(R) - 32.9/m_RCS + 20/m_RCS*log10(k_RCS*T_0*A_0*l_c*sqrt(o)/sum(d)^2);
+
 %% Section 7: FBR Specifications
 
 FBR_Interference = 10*log10(G*P_int*G_amp/P_1dB*(1-abs(Gamma_h)^2));
@@ -261,16 +289,16 @@ FBR_Imaging      = 10*log10(abs(Gamma_h)^2/k_FBR);
 
 %% Generate console output with specifications
 
-spec_pass_msgs = {"No Pass","Pass","N/A"};
+spec_pass_msgs = ["No Pass","Pass","N/A"];
 fprintf("\n_________________________ Post-Design Specifications _________________________\n");
 fprintf("Antenna Coupling Vpp:\n");
-fprintf("\t Maximum: %8.2f V      | Calculated: %8.2f V     | Passed? %s\n", max_coupling_Vpp, coupling_Vpp, spec_pass_msgs{passed_coupling_vpp_spec+1});
+fprintf("\t Maximum: %8.2f V      | Calculated: %8.2f V     | Passed? %s\n", max_coupling_Vpp, coupling_Vpp, spec_pass_msgs(passed_coupling_vpp_spec+1));
 fprintf("Antenna Coupling Slope:\n");
-fprintf("\t Maximum: %8.2f  mV/ns | Calculated: %8.2f mV/ns | Passed? %s\n", max_coupling_slope, coupling_slope, spec_pass_msgs{passed_coupling_slope_spec+1});
+fprintf("\t Maximum: %8.2f  mV/ns | Calculated: %8.2f mV/ns | Passed? %s\n", max_coupling_slope, coupling_slope, spec_pass_msgs(passed_coupling_slope_spec+1));
 fprintf("Pulse Integrity/Distortion:\n");
-fprintf("\t Minimum: %8.2f        | Calculated: %8.3f       | Passed? %s\n", k_distortion, chi, spec_pass_msgs{passed_distortion_spec+1});
+fprintf("\t Minimum: %8.2f        | Calculated: %8.3f       | Passed? %s\n", k_distortion, chi, spec_pass_msgs(passed_distortion_spec+1));
 fprintf("Residual Ringing:\n");
-fprintf("\t Minimum: %8.2f dB     | Calculated: %8.3f dB    | Passed? %s\n", k_ringing, max_ringing_after_first_pk, spec_pass_msgs{passed_ringing_spec+1});
+fprintf("\t Minimum: %8.2f dB     | Calculated: %8.3f dB    | Passed? %s\n", k_ringing, max_ringing_after_first_pk, spec_pass_msgs(passed_ringing_spec+1));
 
 fprintf("\n__________________________ Pre-Design Specifications _________________________\n");
 fprintf("Beamwidth: See Figure 2. Rec. Range: [%8.2f, %8.2f] deg.\n",min_hpbw*180/pi,max_hpbw*180/pi);
@@ -331,7 +359,7 @@ function plot_fig_3(t,t_0,R,y_t,k)
     t_max       = t(max_ind);
     fwtm_2      = t_0 - t_max;
     
-    figure();  set(gcf,'position'[596   291   644   687]);
+    figure(); 
     subplot(2,1,2);
     hold on; grid on;
     plot((t-t_0).*1e9,R,'k');
@@ -376,7 +404,7 @@ function plot_fig_4(HPBWs,HRs,maxGains)
     min_HR_area.FaceColor=[0,0,1];
     min_HR_area.FaceAlpha=0.3;
     xlim([10 120]);
-    ylim([0 max(HRs)*3/4])
+    ylim([0 min(max(HRs)*3/4, 3*min_HR)]);
     xlabel("Beamwidth ($$^{\circ}$$)");
     ylabel("Resolution (cm)");
     aa=gca;
@@ -395,4 +423,24 @@ function plot_fig_4(HPBWs,HRs,maxGains)
     aa.GridColor=[0.1 0.1 0.1];
     aa.GridAlpha=0.3;
     title("Gain vs. Beamwidth (Adjust $$G_0$$)");
+end
+
+function T = find_T(theta_guess,er)
+    n_layers = numel(er);
+    T_0 = 1;
+
+    for ii = 1:(n_layers - 1)
+        t_num = 4*sqrt(er(ii)*er(ii+1))*cos(theta_guess(ii))*sqrt(1-(er(ii)/er(ii+1))*sin(theta_guess(ii))^2);
+        t_denum = (sqrt(er(ii))*cos(theta_guess(ii))+sqrt(er(ii+1))*sqrt(1-(er(ii)/er(ii+1))*sin(theta_guess(ii))^2))^2;
+        T_0 = T_0 * t_num/t_denum;
+    end
+
+    T = T_0;
+end
+
+function A = find_A(theta_guess,d,alpha)
+    d           =  d(:);
+    alpha       = alpha(:);
+    theta_guess = theta_guess(:);
+    A = exp(-2*sum(alpha.*d.*sec(theta_guess)));
 end

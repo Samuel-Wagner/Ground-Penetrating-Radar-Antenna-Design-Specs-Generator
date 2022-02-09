@@ -1,20 +1,5 @@
 function [hpbw_min, hpbw_max] = find_optimal_beamwidths(HPBWs,HRs)
-    % find_optimal_beamwidths
-    % a function to find the optimal range of beamwidths 
-    % optimality is determined by the lowest horizontal resolution
-    %
-    % inputs
-    % HPBWs - an array of half power beamwidths
-    % HRs   - an array of horizontal resolutions corresponding to
-    %         each HPBW
-    %
-    % outputs
-    % hpbw_min - lowest half-power beamwidth within TOL of min(HRs) 
-    % hpbw_max - largest half-power beamwidth within TOL of max(HRs) 
-
-    % TOL - tolerance - 1.1 = 10%, 1.2 = 20%, etc...
-    TOL = 1.1;
-
+    
     % sort to be ascending beamwidths, just in case.
     [HPBWs, sort_inds] = sort(HPBWs,'ascend');
     HRs = HRs(sort_inds);
@@ -23,7 +8,7 @@ function [hpbw_min, hpbw_max] = find_optimal_beamwidths(HPBWs,HRs)
     [HR_at_min, min_ind] = min(HRs);
     
     % take an additional 10% for security
-    HR_at_edges = TOL * HR_at_min;
+    HR_at_edges = 1.1 * HR_at_min;
         
     % split the HRs into left & right
     left  = HRs(1:min_ind);
@@ -48,4 +33,5 @@ function [hpbw_min, hpbw_max] = find_optimal_beamwidths(HPBWs,HRs)
 
     hpbw_min = HPBWs(left_ind);
     hpbw_max = HPBWs(right_ind);
+    
 end

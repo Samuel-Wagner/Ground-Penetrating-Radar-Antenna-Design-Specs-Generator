@@ -4,4 +4,3 @@ function S = flip_phase(x)
     m = abs(x);                     % magnitude
     a = -angle(x);                  % angle
     S = m.*cos(a) + 1j.*m.*sin(a);  % flipped
-end
