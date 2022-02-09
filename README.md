@@ -7,7 +7,7 @@ Several images output:
 
 Specification table:
 
-![spec-table](https://github.com/Samuel-Wagner/Ground-Penetrating-Radar-Antenna-Design-Specs-Generator/blob/main/imgs/fig0.PNG)
+![spec-table](https://github.com/Samuel-Wagner/Ground-Penetrating-Radar-Antenna-Design-Specs-Generator/blob/main/imgs/console_output.PNG)
 
 Coupling specification plots:
 
@@ -23,4 +23,4 @@ Ringing residual specification plot:
 
 Gain/Beamwidth vs. Horizontal Resolution plot:
 
-![gain-horz-res-spec](https://github.com/Samuel-Wagner/Ground-Penetrating-Radar-Antenna-Design-Specs-Generator/blob/main/imgs/fig5.png)
+![gain-horz-res-spec](https://github.com/Samuel-Wagner/Ground-Penetrating-Radar-Antenna-Design-Specs-Generator/blob/main/imgs/fig4.png)
